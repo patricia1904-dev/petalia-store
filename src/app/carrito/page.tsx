@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 
 import { useCart }
-from '@/context/CartContext'
+  from '@/context/CartContext'
 
 export default function CarritoPage() {
 
@@ -271,9 +271,11 @@ export default function CarritoPage() {
 
               </div>
 
-              <a
-                href="/checkout"
-                className="
+              <div className="flex flex-col gap-3">
+
+                <Link
+                  href="/checkout"
+                  className="
                     bg-black
                     text-white
                     py-5
@@ -282,10 +284,29 @@ export default function CarritoPage() {
                     hover:bg-gray-800
                     transition
                     text-center
-                "
-              >
-                Finalizar compras
-              </a>
+                  "
+                >
+                  Finalizar compra
+                </Link>
+
+                <Link
+                  href="/"
+                  className="
+                    border
+                    border-black
+                    text-black
+                    py-4
+                    rounded-2xl
+                    font-bold
+                    hover:bg-gray-100
+                    transition
+                    text-center
+                  "
+                >
+                  Seguir comprando
+                </Link>
+
+              </div>
 
             </div>
 

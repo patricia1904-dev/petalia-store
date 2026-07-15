@@ -1,8 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import Link from 'next/link'
+
+import {
+  useEffect,
+  useState,
+} from 'react'
 
 import { supabase } from '@/lib/supabase'
+
+import {
+  SITE_CONFIG,
+} from '@/config/site'
 
 export default function AdminPage() {
 
@@ -33,6 +42,11 @@ export default function AdminPage() {
     useState<any>(null)
 
   const [mensaje, setMensaje] = useState('')
+
+  const [
+    pedidosParaAtender,
+    setPedidosParaAtender,
+  ] = useState(0)
 
   const categorias = {
 
@@ -137,9 +151,54 @@ export default function AdminPage() {
     setProductos(data || [])
   }
 
+  async function cargarPedidosParaAtender() {
+
+    const {
+      count,
+      error,
+    } = await supabase
+      .from('pedidos')
+      .select(
+        'id',
+        {
+          count: 'exact',
+          head: true,
+        }
+      )
+      .in(
+        'estado',
+        [
+          'Pagado',
+          'Preparando',
+        ]
+      )
+
+    if (error) {
+
+      console.error(
+        'ERROR AL CONTAR PEDIDOS:',
+        error
+      )
+
+      return
+    }
+
+    setPedidosParaAtender(
+      count || 0
+    )
+  }
+
   useEffect(() => {
+
     cargarProductos()
+
   }, [mostrarVendidos])
+
+  useEffect(() => {
+
+    cargarPedidosParaAtender()
+
+  }, [])
 
   function limpiarFormulario() {
 
@@ -325,17 +384,140 @@ export default function AdminPage() {
 
       <div className="max-w-7xl mx-auto flex flex-col gap-10">
 
-        {/* TITULO */}
+        {/* ENCABEZADO DEL ADMIN */}
 
-        <div>
+        <div
+          className="
+            flex
+            flex-col
+            md:flex-row
+            md:items-center
+            md:justify-between
+            gap-6
+          "
+        >
 
-          <h1 className="text-5xl font-black mb-3">
-            Panel Admin
-          </h1>
+          <div>
 
-          <p className="text-gray-500">
-            Gestiona productos de tu tienda.
-          </p>
+            <p
+              className="
+                text-sm
+                uppercase
+                tracking-[3px]
+                text-gray-500
+                mb-2
+              "
+            >
+              {SITE_CONFIG.nombre}
+            </p>
+
+            <h1
+              className="
+                text-4xl
+                md:text-5xl
+                font-black
+                mb-3
+              "
+            >
+              Panel Admin
+            </h1>
+
+            <p className="text-gray-500">
+              Gestioná productos y pedidos.
+            </p>
+
+          </div>
+
+          <nav
+            className="
+              flex
+              flex-col
+              sm:flex-row
+              gap-3
+            "
+          >
+
+            <Link
+              href="/admin"
+              className="
+                bg-black
+                text-white
+                px-6
+                py-3
+                rounded-2xl
+                font-bold
+                text-center
+                hover:bg-gray-800
+                transition
+              "
+            >
+              Productos
+            </Link>
+
+            <Link
+              href="/admin/pedidos"
+              className="
+                border
+                border-black
+                text-black
+                px-6
+                py-3
+                rounded-2xl
+                font-bold
+                text-center
+                hover:bg-gray-100
+                transition
+                flex
+                items-center
+                justify-center
+                gap-2
+              "
+            >
+              <span>
+                Pedidos
+              </span>
+
+              {pedidosParaAtender > 0 && (
+
+                <span
+                  className="
+                    bg-red-600
+                    text-white
+                    text-xs
+                    min-w-6
+                    h-6
+                    px-2
+                    rounded-full
+                    flex
+                    items-center
+                    justify-center
+                  "
+                >
+                  {pedidosParaAtender}
+                </span>
+
+              )}
+            </Link>
+
+            <Link
+              href="/"
+              className="
+                border
+                border-gray-300
+                text-gray-700
+                px-6
+                py-3
+                rounded-2xl
+                font-bold
+                text-center
+                hover:bg-white
+                transition
+              "
+            >
+              Ver tienda
+            </Link>
+
+          </nav>
 
         </div>
 

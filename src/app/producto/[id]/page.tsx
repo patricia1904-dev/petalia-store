@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AddToCartButton from '@/components/AddToCartButton'
 
@@ -137,9 +138,46 @@ export default async function ProductoPage({
 
           </div>
 
-          <AddToCartButton
-            producto={producto}
-            />
+          <div
+            className="
+              flex
+              flex-col
+              sm:flex-row
+              gap-3
+              mt-2
+            "
+          >
+
+            <div className="flex-1">
+
+              <AddToCartButton
+                producto={producto}
+              />
+
+            </div>
+
+            <Link
+              href="/"
+              className="
+                flex-1
+                bg-black
+                text-white
+                py-4
+                px-6
+                rounded-2xl
+                font-semibold
+                text-center
+                hover:bg-gray-800
+                transition
+                flex
+                items-center
+                justify-center
+              "
+            >
+              Volver a la tienda
+            </Link>
+
+          </div>
 
         </div>
 

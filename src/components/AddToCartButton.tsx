@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useCart } from '@/context/CartContext'
 
 export default function AddToCartButton({
@@ -8,25 +9,35 @@ export default function AddToCartButton({
   producto: any
 }) {
 
+  const router = useRouter()
+
   const { agregarAlCarrito } =
     useCart()
+
+  function manejarAgregar() {
+
+    agregarAlCarrito(producto)
+
+    router.push('/')
+  }
 
   return (
 
     <button
-      onClick={() =>
-        agregarAlCarrito(producto)
-      }
+      onClick={manejarAgregar}
       className="
-        mt-8
+        w-full
         bg-black
         text-white
-        px-10
-        py-5
+        py-4
+        px-6
         rounded-2xl
+        font-semibold
         hover:bg-gray-800
         transition
-        font-bold
+        flex
+        items-center
+        justify-center
       "
     >
       Agregar al carrito

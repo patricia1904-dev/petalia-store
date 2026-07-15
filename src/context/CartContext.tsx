@@ -40,50 +40,83 @@ export function CartProvider({
   const [carrito, setCarrito] =
     useState<Producto[]>([])
 
-    useEffect(() => {
+  const [carritoCargado, setCarritoCargado] =
+    useState(false)
+
+  /*
+    Recupera el carrito una sola vez,
+    cuando el componente se carga en el navegador.
+  */
+  useEffect(() => {
+
+    try {
 
       const carritoGuardado =
         localStorage.getItem('carrito')
 
       if (carritoGuardado) {
 
-        setCarrito(
+        const carritoConvertido =
           JSON.parse(carritoGuardado)
-        )
+
+        if (Array.isArray(carritoConvertido)) {
+
+          setCarrito(carritoConvertido)
+        }
       }
+
+    } catch (error) {
+
+      console.error(
+        'Error al recuperar el carrito:',
+        error
+      )
+
+      localStorage.removeItem('carrito')
+    }
+
+    setCarritoCargado(true)
 
   }, [])
 
+  /*
+    Guarda el carrito solamente después
+    de haber leído localStorage.
+  */
   useEffect(() => {
+
+    if (!carritoCargado) {
+      return
+    }
 
     localStorage.setItem(
       'carrito',
       JSON.stringify(carrito)
     )
 
-  }, [carrito])
+  }, [carrito, carritoCargado])
 
   function agregarAlCarrito(
     producto: Producto
   ) {
 
-      setCarrito((prev) => {
+    setCarrito((prev) => {
 
-        const existe = prev.some(
-          (item) =>
-            item.id === producto.id
-        )
+      const existe = prev.some(
+        (item) =>
+          item.id === producto.id
+      )
 
-        if (existe) {
-          return prev
-        }
+      if (existe) {
+        return prev
+      }
 
-        return [
-          ...prev,
-          producto,
-        ]
-      })
-    }
+      return [
+        ...prev,
+        producto,
+      ]
+    })
+  }
 
   function eliminarDelCarrito(
     id: number

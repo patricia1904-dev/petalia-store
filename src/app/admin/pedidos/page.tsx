@@ -1,59 +1,123 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import Link from 'next/link'
+
+import {
+  useEffect,
+  useState,
+} from 'react'
 
 import { supabase } from '@/lib/supabase'
 
+import {
+  SITE_CONFIG,
+} from '@/config/site'
+
+type ProductoPedido = {
+  id: number
+  nombre: string
+  precio: number
+  imagen: string
+  tipo?: string
+  talle?: string
+  categoria?: string
+  subcategoria?: string
+}
+
+type Pedido = {
+  id: number
+  nombre: string
+  email: string
+  telefono: string
+  direccion: string | null
+  ciudad: string | null
+  departamento: string | null
+  total: number
+  productos: ProductoPedido[] | null
+  created_at: string
+  estado: string
+  metodo_envio: string | null
+  metodo_pago: string | null
+  notas: string | null
+}
+
+const ESTADOS_PEDIDO = [
+  'Pendiente de transferencia',
+  'Pendiente de pago',
+  'Pagado',
+  'Preparando',
+  'Enviado',
+  'Entregado',
+  'Cancelado',
+]
+
 export default function AdminPedidosPage() {
 
-  const [pedidos, setPedidos] = useState<any[]>([])
-  
-  const [estadoFiltro, setEstadoFiltro] = useState('Todos')
+  const [
+    pedidos,
+    setPedidos,
+  ] = useState<Pedido[]>([])
+
+  const [
+    estadoFiltro,
+    setEstadoFiltro,
+  ] = useState('Todos')
+
+  const [
+    cargando,
+    setCargando,
+  ] = useState(true)
+
+  const [
+    error,
+    setError,
+  ] = useState('')
+
+  const [
+    mensaje,
+    setMensaje,
+  ] = useState('')
 
   async function cargarPedidos() {
 
-    const { data, error } = await supabase
+    setCargando(true)
+    setError('')
+
+    const {
+      data,
+      error: errorPedidos,
+    } = await supabase
       .from('pedidos')
       .select('*')
-      .order('created_at', {
-        ascending: false,
-      })
+      .order(
+        'created_at',
+        {
+          ascending: false,
+        }
+      )
 
-    if (error) {
+    if (errorPedidos) {
 
-      console.log(
-        'ERROR PEDIDO:',
-        error
-        )
+      console.error(
+        'ERROR AL CARGAR PEDIDOS:',
+        errorPedidos
+      )
 
-      return
-    }
+      setError(
+        'No se pudieron cargar los pedidos.'
+      )
 
-    setPedidos(data || [])
-  }
-
-  async function actualizarEstado(
-    id:number,
-    estado:string
-  ) {
-
-    const { error } = await supabase
-      .from('pedidos')
-      .update({
-        estado,
-      })
-      .eq('id', id)
-
-    if (error) {
-
-      console.log(error)
+      setCargando(false)
 
       return
     }
 
-    cargarPedidos()
-  }
+    setPedidos(
+      (data as Pedido[]) || []
+    )
 
+    setCargando(false)
+  }
 
   useEffect(() => {
 
@@ -61,319 +125,1164 @@ export default function AdminPedidosPage() {
 
   }, [])
 
-  const pedidosFiltrados = pedidos.filter(
-    (pedido) => {
+  async function actualizarEstado(
+    id: number,
+    nuevoEstado: string
+  ) {
 
-      if (estadoFiltro === 'Todos') {
-        return true
-      }
+    const estadoAnterior =
+      pedidos.find(
+        (pedido) =>
+          pedido.id === id
+      )?.estado
 
-      return pedido.estado === estadoFiltro
+    /*
+      Actualizamos primero la pantalla para
+      que el cambio se vea inmediatamente.
+    */
+    setPedidos(
+      (pedidosActuales) =>
+        pedidosActuales.map(
+          (pedido) =>
+            pedido.id === id
+              ? {
+                  ...pedido,
+                  estado: nuevoEstado,
+                }
+              : pedido
+        )
+    )
+
+    const { error: errorActualizar } =
+      await supabase
+        .from('pedidos')
+        .update({
+          estado: nuevoEstado,
+        })
+        .eq('id', id)
+
+    if (errorActualizar) {
+
+      console.error(
+        'ERROR AL ACTUALIZAR PEDIDO:',
+        errorActualizar
+      )
+
+      /*
+        Si falla Supabase, recuperamos
+        el estado anterior.
+      */
+      setPedidos(
+        (pedidosActuales) =>
+          pedidosActuales.map(
+            (pedido) =>
+              pedido.id === id
+                ? {
+                    ...pedido,
+                    estado:
+                      estadoAnterior ||
+                      pedido.estado,
+                  }
+                : pedido
+          )
+      )
+
+      setError(
+        'No se pudo actualizar el estado del pedido.'
+      )
+
+      return
     }
-  )
+
+    setMensaje(
+      `Pedido N.º ${id} actualizado a “${nuevoEstado}”.`
+    )
+
+    window.setTimeout(() => {
+
+      setMensaje('')
+
+    }, 3000)
+  }
+
+  function obtenerClasesEstado(
+    estado: string
+  ) {
+
+    if (
+      estado ===
+      'Pendiente de transferencia'
+    ) {
+
+      return `
+        bg-yellow-100
+        text-yellow-800
+      `
+    }
+
+    if (
+      estado ===
+      'Pendiente de pago'
+    ) {
+
+      return `
+        bg-orange-100
+        text-orange-800
+      `
+    }
+
+    if (estado === 'Pagado') {
+
+      return `
+        bg-blue-100
+        text-blue-800
+      `
+    }
+
+    if (estado === 'Preparando') {
+
+      return `
+        bg-cyan-100
+        text-cyan-800
+      `
+    }
+
+    if (estado === 'Enviado') {
+
+      return `
+        bg-purple-100
+        text-purple-800
+      `
+    }
+
+    if (estado === 'Entregado') {
+
+      return `
+        bg-green-100
+        text-green-800
+      `
+    }
+
+    if (estado === 'Cancelado') {
+
+      return `
+        bg-red-100
+        text-red-800
+      `
+    }
+
+    return `
+      bg-gray-100
+      text-gray-800
+    `
+  }
+
+  function formatearFecha(
+    fecha: string
+  ) {
+
+    return new Intl.DateTimeFormat(
+      'es-UY',
+      {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }
+    ).format(
+      new Date(fecha)
+    )
+  }
+
+  const pedidosFiltrados =
+    pedidos.filter(
+      (pedido) => {
+
+        if (
+          estadoFiltro === 'Todos'
+        ) {
+
+          return true
+        }
+
+        return (
+          pedido.estado ===
+          estadoFiltro
+        )
+      }
+    )
+
+  const cantidadPendientes =
+    pedidos.filter(
+      (pedido) =>
+        pedido.estado ===
+          'Pendiente de transferencia' ||
+        pedido.estado ===
+          'Pendiente de pago'
+    ).length
+
+  const cantidadPagados =
+    pedidos.filter(
+      (pedido) =>
+        pedido.estado ===
+        'Pagado'
+    ).length
 
   return (
 
-    <main className="min-h-screen bg-[#fafafa] p-6">
+    <main
+      className="
+        min-h-screen
+        bg-[#fafafa]
+        px-4
+        py-6
+        md:p-6
+      "
+    >
 
-      <div className="max-w-7xl mx-auto">
+      <div
+        className="
+          max-w-7xl
+          mx-auto
+          flex
+          flex-col
+          gap-10
+        "
+      >
 
-        {/* TITULO */}
+        {/* ENCABEZADO */}
 
-        <div className="mb-10">
+        <div
+          className="
+            flex
+            flex-col
+            lg:flex-row
+            lg:items-center
+            lg:justify-between
+            gap-6
+          "
+        >
 
-          <h1 className="text-5xl font-black mb-3">
-            Pedidos
-          </h1>
+          <div>
 
-          <p className="text-gray-500">
-            Gestión de pedidos realizados.
-          </p>
-
-          <div className="mt-6">
-            <select
-              value={estadoFiltro}
-              onChange={(e) =>
-                setEstadoFiltro(e.target.value)
-              }
+            <p
               className="
-                border
-                rounded-2xl
-                px-5
-                py-3
-                bg-white
+                text-sm
+                uppercase
+                tracking-[3px]
+                text-gray-500
+                mb-2
               "
             >
+              {SITE_CONFIG.nombre}
+            </p>
 
-              <option value="Todos">
-                Todos los estados
-              </option>
+            <h1
+              className="
+                text-4xl
+                md:text-5xl
+                font-black
+                mb-3
+              "
+            >
+              Pedidos
+            </h1>
 
-              <option value="Pendiente">
-                Pendiente
-              </option>
+            <p className="text-gray-500">
+              Gestión de pedidos realizados.
+            </p>
 
-              <option value="Pagado">
-                Pagado
-              </option>
+          </div>
 
-              <option value="Enviado">
-                Enviado
-              </option>
+          <nav
+            className="
+              flex
+              flex-col
+              sm:flex-row
+              gap-3
+            "
+          >
 
-              <option value="Entregado">
-                Entregado
-              </option>
+            <Link
+              href="/admin"
+              className="
+                border
+                border-black
+                text-black
+                px-6
+                py-3
+                rounded-2xl
+                font-bold
+                text-center
+                hover:bg-gray-100
+                transition
+              "
+            >
+              Productos
+            </Link>
 
-            </select>
+            <Link
+              href="/admin/pedidos"
+              className="
+                bg-black
+                text-white
+                px-6
+                py-3
+                rounded-2xl
+                font-bold
+                text-center
+                hover:bg-gray-800
+                transition
+              "
+            >
+              Pedidos
+            </Link>
+
+            <Link
+              href="/"
+              className="
+                border
+                border-gray-300
+                text-gray-700
+                px-6
+                py-3
+                rounded-2xl
+                font-bold
+                text-center
+                hover:bg-white
+                transition
+              "
+            >
+              Ver tienda
+            </Link>
+
+          </nav>
+
+        </div>
+
+        {/* RESUMEN GENERAL */}
+
+        <div
+          className="
+            grid
+            sm:grid-cols-3
+            gap-4
+          "
+        >
+
+          <div
+            className="
+              bg-white
+              border
+              rounded-3xl
+              p-6
+            "
+          >
+
+            <p className="text-gray-500">
+              Total de pedidos
+            </p>
+
+            <p
+              className="
+                text-4xl
+                font-black
+                mt-2
+              "
+            >
+              {pedidos.length}
+            </p>
+
+          </div>
+
+          <div
+            className="
+              bg-white
+              border
+              rounded-3xl
+              p-6
+            "
+          >
+
+            <p className="text-gray-500">
+              Pendientes de pago
+            </p>
+
+            <p
+              className="
+                text-4xl
+                font-black
+                mt-2
+              "
+            >
+              {cantidadPendientes}
+            </p>
+
+          </div>
+
+          <div
+            className="
+              bg-white
+              border
+              rounded-3xl
+              p-6
+            "
+          >
+
+            <p className="text-gray-500">
+              Pagados
+            </p>
+
+            <p
+              className="
+                text-4xl
+                font-black
+                mt-2
+              "
+            >
+              {cantidadPagados}
+            </p>
 
           </div>
 
         </div>
 
+        {/* MENSAJES */}
+
+        {mensaje && (
+
+          <div
+            className="
+              bg-black
+              text-white
+              px-6
+              py-4
+              rounded-2xl
+              font-medium
+            "
+          >
+            {mensaje}
+          </div>
+
+        )}
+
+        {error && (
+
+          <div
+            className="
+              bg-red-50
+              border
+              border-red-200
+              text-red-700
+              px-6
+              py-4
+              rounded-2xl
+            "
+          >
+            {error}
+          </div>
+
+        )}
+
+        {/* FILTROS */}
+
+        <div
+          className="
+            flex
+            flex-col
+            sm:flex-row
+            sm:items-center
+            gap-4
+          "
+        >
+
+          <select
+            value={estadoFiltro}
+            onChange={(evento) =>
+              setEstadoFiltro(
+                evento.target.value
+              )
+            }
+            className="
+              border
+              rounded-2xl
+              px-5
+              py-3
+              bg-white
+              w-full
+              sm:w-auto
+            "
+          >
+
+            <option value="Todos">
+              Todos los estados
+            </option>
+
+            {ESTADOS_PEDIDO.map(
+              (estado) => (
+
+                <option
+                  key={estado}
+                  value={estado}
+                >
+                  {estado}
+                </option>
+
+              )
+            )}
+
+          </select>
+
+          <button
+            type="button"
+            onClick={cargarPedidos}
+            className="
+              border
+              border-black
+              px-5
+              py-3
+              rounded-2xl
+              font-bold
+              hover:bg-gray-100
+              transition
+            "
+          >
+            Actualizar
+          </button>
+
+          <p
+            className="
+              text-sm
+              text-gray-500
+              sm:ml-auto
+            "
+          >
+            Mostrando{' '}
+            {pedidosFiltrados.length}{' '}
+            pedido(s)
+          </p>
+
+        </div>
+
+        {/* CARGANDO */}
+
+        {cargando && (
+
+          <div
+            className="
+              bg-white
+              border
+              rounded-3xl
+              p-10
+              text-center
+              text-gray-500
+            "
+          >
+            Cargando pedidos...
+          </div>
+
+        )}
+
+        {/* SIN PEDIDOS */}
+
+        {!cargando &&
+          pedidosFiltrados.length === 0 && (
+
+          <div
+            className="
+              bg-white
+              border
+              rounded-3xl
+              p-10
+              text-center
+            "
+          >
+
+            <h2
+              className="
+                text-2xl
+                font-black
+              "
+            >
+              No hay pedidos
+            </h2>
+
+            <p
+              className="
+                text-gray-500
+                mt-2
+              "
+            >
+              No existen pedidos con el
+              estado seleccionado.
+            </p>
+
+          </div>
+
+        )}
+
         {/* LISTADO */}
 
-        <div className="flex flex-col gap-8">
+        {!cargando && (
 
-          {
-            pedidosFiltrados.map((pedido) => (
+          <div
+            className="
+              flex
+              flex-col
+              gap-8
+            "
+          >
 
-              <article
-                key={pedido.id}
-                className="
-                  bg-white
-                  rounded-[30px]
-                  p-8
-                  shadow-sm
-                "
-              >
+            {pedidosFiltrados.map(
+              (pedido) => (
 
-                {/* HEADER */}
-
-                <div
+                <article
+                  key={pedido.id}
                   className="
-                    flex
-                    flex-col
-                    lg:flex-row
-                    lg:items-center
-                    lg:justify-between
-                    gap-6
-                    mb-8
+                    bg-white
+                    rounded-[30px]
+                    p-5
+                    md:p-8
+                    shadow-sm
+                    border
+                    border-gray-100
                   "
                 >
 
-                  <div>
+                  {/* CABECERA DEL PEDIDO */}
 
-                    <h2 className="text-3xl font-black">
-                      {pedido.nombre}
-                    </h2>
+                  <div
+                    className="
+                      flex
+                      flex-col
+                      lg:flex-row
+                      lg:items-start
+                      lg:justify-between
+                      gap-6
+                      mb-8
+                    "
+                  >
 
-                    <p className="text-gray-500 mt-2">
-                      {pedido.email}
-                    </p>
+                    <div>
 
-                  </div>
-
-                  <div className="text-right">
-
-                    <div className="flex justify-end mb-3">
-
-                      <select
-                        value={pedido.estado}
-                        onChange={(e) =>
-                          actualizarEstado(
-                            pedido.id,
-                            e.target.value
-                          )
-                        }
-                        className={`
-                          px-4
-                          py-2
-                          rounded-full
+                      <p
+                        className="
                           text-sm
-                          font-bold
-                          border-0
-
-                          ${
-                            pedido.estado === 'Pendiente'
-                              ? 'bg-yellow-100 text-yellow-700'
-
-                            : pedido.estado === 'Pagado'
-                              ? 'bg-blue-100 text-blue-700'
-
-                            : pedido.estado === 'Enviado'
-                              ? 'bg-purple-100 text-purple-700'
-
-                            : 'bg-green-100 text-green-700'
-                          }
-                        `}
+                          text-gray-500
+                          mb-2
+                        "
                       >
+                        Pedido N.º {pedido.id}
+                      </p>
 
-                        <option value="Pendiente">
-                          Pendiente
-                        </option>
+                      <h2
+                        className="
+                          text-2xl
+                          md:text-3xl
+                          font-black
+                        "
+                      >
+                        {pedido.nombre}
+                      </h2>
 
-                        <option value="Pagado">
-                          Pagado
-                        </option>
+                      <p
+                        className="
+                          text-gray-500
+                          mt-2
+                          break-all
+                        "
+                      >
+                        {pedido.email}
+                      </p>
 
-                        <option value="Enviado">
-                          Enviado
-                        </option>
-
-                        <option value="Entregado">
-                          Entregado
-                        </option>
-
-                      </select>
+                      <p
+                        className="
+                          text-sm
+                          text-gray-500
+                          mt-2
+                        "
+                      >
+                        {formatearFecha(
+                          pedido.created_at
+                        )}
+                      </p>
 
                     </div>
 
-                    <p className="text-4xl font-black">
-                      ${pedido.total}
-                    </p>
+                    <div
+                      className="
+                        flex
+                        flex-col
+                        items-start
+                        lg:items-end
+                        gap-3
+                      "
+                    >
 
-                    <p className="text-gray-500 mt-2">
-                      {
-                        new Date(
-                          pedido.created_at
-                        ).toLocaleDateString()
-                      }
-                    </p>
+                      <select
+                        value={pedido.estado}
+                        onChange={(evento) =>
+                          actualizarEstado(
+                            pedido.id,
+                            evento.target.value
+                          )
+                        }
+                        className={`
+                          max-w-full
+                          px-4
+                          py-2.5
+                          rounded-2xl
+                          text-sm
+                          font-bold
+                          border-0
+                          cursor-pointer
+                          ${obtenerClasesEstado(
+                            pedido.estado
+                          )}
+                        `}
+                      >
 
-                  </div>
-                </div>
+                        {/*
+                          Si existe algún pedido antiguo
+                          con un estado diferente, lo
+                          mostramos para no romper el select.
+                        */}
 
-                {/* DATOS */}
+                        {!ESTADOS_PEDIDO.includes(
+                          pedido.estado
+                        ) && (
 
-                <div
-                  className="
-                    grid
-                    md:grid-cols-3
-                    gap-6
-                    mb-8
-                  "
-                >
-
-                  <div>
-
-                    <p className="text-sm text-gray-500 mb-2">
-                      Teléfono
-                    </p>
-
-                    <p className="font-semibold">
-                      {pedido.telefono}
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-sm text-gray-500 mb-2">
-                      Ciudad
-                    </p>
-
-                    <p className="font-semibold">
-                      {pedido.ciudad}
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-sm text-gray-500 mb-2">
-                      Departamento
-                    </p>
-
-                    <p className="font-semibold">
-                      {pedido.departamento}
-                    </p>
-
-                  </div>
-
-                </div>
-
-                {/* DIRECCION */}
-
-                <div className="mb-8">
-
-                  <p className="text-sm text-gray-500 mb-2">
-                    Dirección
-                  </p>
-
-                  <p className="font-semibold">
-                    {pedido.direccion}
-                  </p>
-
-                </div>
-
-                {/* PRODUCTOS */}
-
-                <div>
-
-                  <h3 className="text-2xl font-black mb-6">
-                    Productos
-                  </h3>
-
-                  <div className="grid gap-4">
-
-                    {
-                      pedido.productos?.map(
-                        (producto:any) => (
-
-                          <div
-                            key={producto.id}
-                            className="
-                              border
-                              rounded-2xl
-                              p-4
-                              flex
-                              items-center
-                              gap-4
-                            "
+                          <option
+                            value={pedido.estado}
                           >
+                            {pedido.estado}
+                          </option>
 
-                            <img
-                              src={producto.imagen}
-                              alt={producto.nombre}
+                        )}
+
+                        {ESTADOS_PEDIDO.map(
+                          (estado) => (
+
+                            <option
+                              key={estado}
+                              value={estado}
+                            >
+                              {estado}
+                            </option>
+
+                          )
+                        )}
+
+                      </select>
+
+                      <p
+                        className="
+                          text-3xl
+                          md:text-4xl
+                          font-black
+                        "
+                      >
+                        ${pedido.total}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  {/* PAGO Y ENTREGA */}
+
+                  <div
+                    className="
+                      grid
+                      sm:grid-cols-2
+                      lg:grid-cols-4
+                      gap-5
+                      mb-8
+                    "
+                  >
+
+                    <div
+                      className="
+                        bg-gray-50
+                        rounded-2xl
+                        p-4
+                      "
+                    >
+
+                      <p
+                        className="
+                          text-sm
+                          text-gray-500
+                          mb-2
+                        "
+                      >
+                        Método de pago
+                      </p>
+
+                      <p className="font-bold">
+                        {
+                          pedido.metodo_pago ||
+                          'No especificado'
+                        }
+                      </p>
+
+                    </div>
+
+                    <div
+                      className="
+                        bg-gray-50
+                        rounded-2xl
+                        p-4
+                      "
+                    >
+
+                      <p
+                        className="
+                          text-sm
+                          text-gray-500
+                          mb-2
+                        "
+                      >
+                        Método de entrega
+                      </p>
+
+                      <p className="font-bold">
+                        {
+                          pedido.metodo_envio ||
+                          'No especificado'
+                        }
+                      </p>
+
+                    </div>
+
+                    <div
+                      className="
+                        bg-gray-50
+                        rounded-2xl
+                        p-4
+                      "
+                    >
+
+                      <p
+                        className="
+                          text-sm
+                          text-gray-500
+                          mb-2
+                        "
+                      >
+                        Teléfono
+                      </p>
+
+                      <p
+                        className="
+                          font-bold
+                          break-all
+                        "
+                      >
+                        {pedido.telefono}
+                      </p>
+
+                    </div>
+
+                    <div
+                      className="
+                        bg-gray-50
+                        rounded-2xl
+                        p-4
+                      "
+                    >
+
+                      <p
+                        className="
+                          text-sm
+                          text-gray-500
+                          mb-2
+                        "
+                      >
+                        Estado
+                      </p>
+
+                      <p className="font-bold">
+                        {pedido.estado}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  {/* DATOS DE ENTREGA */}
+
+                  <div
+                    className="
+                      border-t
+                      pt-7
+                      mb-8
+                    "
+                  >
+
+                    <h3
+                      className="
+                        text-xl
+                        font-black
+                        mb-5
+                      "
+                    >
+                      Datos de entrega
+                    </h3>
+
+                    <div
+                      className="
+                        grid
+                        md:grid-cols-3
+                        gap-6
+                      "
+                    >
+
+                      <div>
+
+                        <p
+                          className="
+                            text-sm
+                            text-gray-500
+                            mb-2
+                          "
+                        >
+                          Dirección
+                        </p>
+
+                        <p className="font-semibold">
+                          {
+                            pedido.direccion ||
+                            'No corresponde'
+                          }
+                        </p>
+
+                      </div>
+
+                      <div>
+
+                        <p
+                          className="
+                            text-sm
+                            text-gray-500
+                            mb-2
+                          "
+                        >
+                          Ciudad o localidad
+                        </p>
+
+                        <p className="font-semibold">
+                          {
+                            pedido.ciudad ||
+                            'No corresponde'
+                          }
+                        </p>
+
+                      </div>
+
+                      <div>
+
+                        <p
+                          className="
+                            text-sm
+                            text-gray-500
+                            mb-2
+                          "
+                        >
+                          Departamento
+                        </p>
+
+                        <p className="font-semibold">
+                          {
+                            pedido.departamento ||
+                            'No corresponde'
+                          }
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* NOTAS */}
+
+                  {pedido.notas && (
+
+                    <div
+                      className="
+                        bg-yellow-50
+                        border
+                        border-yellow-100
+                        rounded-2xl
+                        p-5
+                        mb-8
+                      "
+                    >
+
+                      <p
+                        className="
+                          text-sm
+                          text-yellow-800
+                          font-bold
+                          mb-2
+                        "
+                      >
+                        Notas del comprador
+                      </p>
+
+                      <p
+                        className="
+                          text-gray-700
+                          whitespace-pre-wrap
+                        "
+                      >
+                        {pedido.notas}
+                      </p>
+
+                    </div>
+
+                  )}
+
+                  {/* PRODUCTOS */}
+
+                  <div
+                    className="
+                      border-t
+                      pt-7
+                    "
+                  >
+
+                    <h3
+                      className="
+                        text-2xl
+                        font-black
+                        mb-6
+                      "
+                    >
+                      Productos
+                    </h3>
+
+                    {!pedido.productos ||
+                      pedido.productos.length === 0 ? (
+
+                      <p className="text-gray-500">
+                        Este pedido no tiene productos
+                        registrados.
+                      </p>
+
+                    ) : (
+
+                      <div
+                        className="
+                          grid
+                          gap-4
+                        "
+                      >
+
+                        {pedido.productos.map(
+                          (producto) => (
+
+                            <div
+                              key={producto.id}
                               className="
-                                w-20
-                                h-20
-                                object-cover
-                                rounded-xl
+                                border
+                                rounded-2xl
+                                p-4
+                                flex
+                                items-center
+                                gap-4
                               "
-                            />
+                            >
 
-                            <div className="flex-1">
+                              <img
+                                src={producto.imagen}
+                                alt={producto.nombre}
+                                className="
+                                  w-16
+                                  h-16
+                                  md:w-20
+                                  md:h-20
+                                  object-cover
+                                  rounded-xl
+                                  shrink-0
+                                "
+                              />
 
-                              <h4 className="font-bold">
-                                {producto.nombre}
-                              </h4>
+                              <div
+                                className="
+                                  flex-1
+                                  min-w-0
+                                "
+                              >
 
-                              <p className="text-sm text-gray-500">
-                                {producto.tipo}
+                                <h4
+                                  className="
+                                    font-bold
+                                    truncate
+                                  "
+                                >
+                                  {producto.nombre}
+                                </h4>
+
+                                <p
+                                  className="
+                                    text-sm
+                                    text-gray-500
+                                    mt-1
+                                  "
+                                >
+                                  {
+                                    producto.tipo ||
+                                    producto.subcategoria ||
+                                    'Producto'
+                                  }
+                                </p>
+
+                                {producto.talle && (
+
+                                  <p
+                                    className="
+                                      text-xs
+                                      text-gray-500
+                                      mt-1
+                                    "
+                                  >
+                                    Talle {producto.talle}
+                                  </p>
+
+                                )}
+
+                              </div>
+
+                              <p
+                                className="
+                                  font-black
+                                  text-lg
+                                  md:text-xl
+                                  shrink-0
+                                "
+                              >
+                                ${producto.precio}
                               </p>
 
                             </div>
 
-                            <p className="font-black text-xl">
-                              ${producto.precio}
-                            </p>
+                          )
+                        )}
 
-                          </div>
-                        )
-                      )
-                    }
+                      </div>
+
+                    )}
 
                   </div>
 
-                </div>
+                </article>
 
-              </article>
-            ))
-          }
+              )
+            )}
 
-        </div>
+          </div>
+
+        )}
 
       </div>
 
