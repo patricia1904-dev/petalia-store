@@ -41,15 +41,15 @@ type Pedido = {
   notas: string | null
 }
 
-const ESTADOS_PEDIDO = [
-  'Pendiente de transferencia',
-  'Pendiente de pago',
-  'Pagado',
-  'Preparando',
-  'Enviado',
-  'Entregado',
-  'Cancelado',
-]
+const [
+  estadoPendienteTransferencia,
+  estadoPendientePago,
+  estadoPagado,
+  estadoPreparando,
+  estadoEnviado,
+  estadoEntregado,
+  estadoCancelado,
+] = SITE_CONFIG.estadosPedido
 
 export default function AdminPedidosPage() {
 
@@ -211,7 +211,7 @@ export default function AdminPedidosPage() {
 
     if (
       estado ===
-      'Pendiente de transferencia'
+      estadoPendienteTransferencia
     ) {
 
       return `
@@ -222,7 +222,7 @@ export default function AdminPedidosPage() {
 
     if (
       estado ===
-      'Pendiente de pago'
+      estadoPendientePago
     ) {
 
       return `
@@ -231,7 +231,7 @@ export default function AdminPedidosPage() {
       `
     }
 
-    if (estado === 'Pagado') {
+    if (estado === estadoPagado) {
 
       return `
         bg-blue-100
@@ -239,7 +239,7 @@ export default function AdminPedidosPage() {
       `
     }
 
-    if (estado === 'Preparando') {
+    if (estado === estadoPreparando) {
 
       return `
         bg-cyan-100
@@ -247,7 +247,7 @@ export default function AdminPedidosPage() {
       `
     }
 
-    if (estado === 'Enviado') {
+    if (estado === estadoEnviado) {
 
       return `
         bg-purple-100
@@ -255,7 +255,7 @@ export default function AdminPedidosPage() {
       `
     }
 
-    if (estado === 'Entregado') {
+    if (estado === estadoEntregado) {
 
       return `
         bg-green-100
@@ -263,7 +263,7 @@ export default function AdminPedidosPage() {
       `
     }
 
-    if (estado === 'Cancelado') {
+    if (estado === estadoCancelado) {
 
       return `
         bg-red-100
@@ -314,16 +314,16 @@ export default function AdminPedidosPage() {
     pedidos.filter(
       (pedido) =>
         pedido.estado ===
-          'Pendiente de transferencia' ||
+          estadoPendienteTransferencia ||
         pedido.estado ===
-          'Pendiente de pago'
+          estadoPendientePago
     ).length
 
   const cantidadPagados =
     pedidos.filter(
       (pedido) =>
         pedido.estado ===
-        'Pagado'
+        estadoPagado
     ).length
 
   return (
@@ -616,7 +616,7 @@ export default function AdminPedidosPage() {
               Todos los estados
             </option>
 
-            {ESTADOS_PEDIDO.map(
+            {SITE_CONFIG.estadosPedido.map(
               (estado) => (
 
                 <option
@@ -846,8 +846,9 @@ export default function AdminPedidosPage() {
                           mostramos para no romper el select.
                         */}
 
-                        {!ESTADOS_PEDIDO.includes(
-                          pedido.estado
+                        {!SITE_CONFIG.estadosPedido.some(
+                          (estado) =>
+                            estado === pedido.estado
                         ) && (
 
                           <option
@@ -858,7 +859,7 @@ export default function AdminPedidosPage() {
 
                         )}
 
-                        {ESTADOS_PEDIDO.map(
+                        {SITE_CONFIG.estadosPedido.map(
                           (estado) => (
 
                             <option
@@ -880,7 +881,8 @@ export default function AdminPedidosPage() {
                           font-black
                         "
                       >
-                        ${pedido.total}
+                        {SITE_CONFIG.empresa.simboloMoneda}
+                        {pedido.total}
                       </p>
 
                     </div>
@@ -1261,7 +1263,8 @@ export default function AdminPedidosPage() {
                                   shrink-0
                                 "
                               >
-                                ${producto.precio}
+                                {SITE_CONFIG.empresa.simboloMoneda}
+                                {producto.precio}
                               </p>
 
                             </div>

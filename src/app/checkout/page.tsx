@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { SITE_CONFIG }
+  from '@/config/site'
+
 import { useCart }
   from '@/context/CartContext'
 
@@ -70,20 +73,32 @@ export default function CheckoutPage() {
     setMensajeError,
   ] = useState('')
 
+  const metodoTransferencia =
+    'Transferencia bancaria'
+
+  const retiroEnTienda =
+    'Retira en tienda'
+
   const total = carrito.reduce(
     (acumulado, producto) =>
-      acumulado + Number(producto.precio),
+      acumulado +
+      Number(producto.precio),
+
     0
   )
 
   const requiereDireccion =
-    metodoEnvio !== 'Retira en tienda'
+    metodoEnvio !== retiroEnTienda
 
   function validarFormulario() {
 
     if (carrito.length === 0) {
 
-      return 'Tu carrito está vacío.'
+      return (
+        SITE_CONFIG
+          .mensajes
+          .carritoVacio
+      )
     }
 
     if (!nombre.trim()) {
@@ -178,17 +193,23 @@ export default function CheckoutPage() {
 
           direccion:
             requiereDireccion
+
               ? direccion.trim()
+
               : 'Retiro en tienda',
 
           ciudad:
             requiereDireccion
+
               ? ciudad.trim()
+
               : null,
 
           departamento:
             requiereDireccion
+
               ? departamento
+
               : null,
 
           metodo_envio:
@@ -207,7 +228,7 @@ export default function CheckoutPage() {
 
           estado:
             metodoPago ===
-              'Transferencia bancaria'
+              metodoTransferencia
 
               ? 'Pendiente de transferencia'
 
@@ -237,7 +258,7 @@ export default function CheckoutPage() {
 
       if (
         metodoPago ===
-        'Transferencia bancaria'
+        metodoTransferencia
       ) {
 
         router.push(
@@ -267,7 +288,9 @@ export default function CheckoutPage() {
             Number(producto.precio),
 
           currency_id:
-            'UYU',
+            SITE_CONFIG
+              .empresa
+              .moneda,
         })
       )
 
@@ -288,6 +311,7 @@ export default function CheckoutPage() {
 
           body: JSON.stringify({
             items,
+
             pedidoId:
               pedidoCreado.id,
           }),
@@ -359,19 +383,42 @@ export default function CheckoutPage() {
       "
     >
 
-      <h1
+      {/* ENCABEZADO */}
+
+      <div
         className="
-          text-4xl
-          md:text-5xl
-          font-black
           mb-10
           md:mb-14
         "
       >
-        Checkout
-      </h1>
+
+        <p
+          className="
+            text-sm
+            uppercase
+            tracking-[3px]
+            text-gray-500
+            mb-2
+          "
+        >
+          {SITE_CONFIG.nombre}
+        </p>
+
+        <h1
+          className="
+            text-4xl
+            md:text-5xl
+            font-black
+          "
+        >
+          Checkout
+        </h1>
+
+      </div>
 
       {carrito.length === 0 ? (
+
+        /* CARRITO VACÍO */
 
         <div
           className="
@@ -388,7 +435,11 @@ export default function CheckoutPage() {
               font-black
             "
           >
-            Tu carrito está vacío
+            {
+              SITE_CONFIG
+                .mensajes
+                .carritoVacio
+            }
           </h2>
 
           <p
@@ -449,6 +500,8 @@ export default function CheckoutPage() {
               await finalizarCompra()
             }}
           >
+
+            {/* DATOS DEL COMPRADOR */}
 
             <h2
               className="
@@ -517,6 +570,8 @@ export default function CheckoutPage() {
               "
             />
 
+            {/* ENTREGA */}
+
             <h2
               className="
                 text-2xl
@@ -530,11 +585,31 @@ export default function CheckoutPage() {
 
             <select
               value={metodoEnvio}
-              onChange={(evento) =>
-                setMetodoEnvio(
+              onChange={(evento) => {
+
+                const nuevoMetodo =
                   evento.target.value
+
+                setMetodoEnvio(
+                  nuevoMetodo
                 )
-              }
+
+                /*
+                  Si el comprador pasa a
+                  retiro en tienda, limpiamos
+                  los datos de envío anteriores.
+                */
+
+                if (
+                  nuevoMetodo ===
+                  retiroEnTienda
+                ) {
+
+                  setDireccion('')
+                  setCiudad('')
+                  setDepartamento('')
+                }
+              }}
               disabled={procesando}
               className="
                 border
@@ -550,17 +625,22 @@ export default function CheckoutPage() {
                 Seleccionar método de envío
               </option>
 
-              <option value="DAC">
-                DAC
-              </option>
+              {
+                SITE_CONFIG
+                  .metodosEnvio
+                  .map(
+                    (metodo) => (
 
-              <option value="Mirtrans">
-                Mirtrans
-              </option>
+                      <option
+                        key={metodo}
+                        value={metodo}
+                      >
+                        {metodo}
+                      </option>
 
-              <option value="Retira en tienda">
-                Retira en tienda
-              </option>
+                    )
+                  )
+              }
 
             </select>
 
@@ -628,87 +708,36 @@ export default function CheckoutPage() {
                     Seleccionar departamento
                   </option>
 
-                  <option value="Artigas">
-                    Artigas
-                  </option>
+                  {
+                    SITE_CONFIG
+                      .departamentos
+                      .map(
+                        (nombreDepartamento) => (
 
-                  <option value="Canelones">
-                    Canelones
-                  </option>
+                          <option
+                            key={
+                              nombreDepartamento
+                            }
+                            value={
+                              nombreDepartamento
+                            }
+                          >
+                            {
+                              nombreDepartamento
+                            }
+                          </option>
 
-                  <option value="Cerro Largo">
-                    Cerro Largo
-                  </option>
-
-                  <option value="Colonia">
-                    Colonia
-                  </option>
-
-                  <option value="Durazno">
-                    Durazno
-                  </option>
-
-                  <option value="Flores">
-                    Flores
-                  </option>
-
-                  <option value="Florida">
-                    Florida
-                  </option>
-
-                  <option value="Lavalleja">
-                    Lavalleja
-                  </option>
-
-                  <option value="Maldonado">
-                    Maldonado
-                  </option>
-
-                  <option value="Montevideo">
-                    Montevideo
-                  </option>
-
-                  <option value="Paysandú">
-                    Paysandú
-                  </option>
-
-                  <option value="Río Negro">
-                    Río Negro
-                  </option>
-
-                  <option value="Rivera">
-                    Rivera
-                  </option>
-
-                  <option value="Rocha">
-                    Rocha
-                  </option>
-
-                  <option value="Salto">
-                    Salto
-                  </option>
-
-                  <option value="San José">
-                    San José
-                  </option>
-
-                  <option value="Soriano">
-                    Soriano
-                  </option>
-
-                  <option value="Tacuarembó">
-                    Tacuarembó
-                  </option>
-
-                  <option value="Treinta y Tres">
-                    Treinta y Tres
-                  </option>
+                        )
+                      )
+                  }
 
                 </select>
 
               </>
 
             )}
+
+            {/* PAGO */}
 
             <h2
               className="
@@ -743,15 +772,26 @@ export default function CheckoutPage() {
                 Seleccionar método de pago
               </option>
 
-              <option value="MercadoPago">
-                Mercado Pago
-              </option>
+              {
+                SITE_CONFIG
+                  .metodosPago
+                  .map(
+                    (metodo) => (
 
-              <option value="Transferencia bancaria">
-                Transferencia bancaria
-              </option>
+                      <option
+                        key={metodo.valor}
+                        value={metodo.valor}
+                      >
+                        {metodo.etiqueta}
+                      </option>
+
+                    )
+                  )
+              }
 
             </select>
+
+            {/* NOTAS */}
 
             <textarea
               placeholder="Notas adicionales — opcional"
@@ -773,6 +813,8 @@ export default function CheckoutPage() {
               "
             />
 
+            {/* ERROR */}
+
             {mensajeError && (
 
               <div
@@ -791,6 +833,8 @@ export default function CheckoutPage() {
 
             )}
 
+            {/* CONFIRMAR */}
+
             <button
               type="submit"
               disabled={procesando}
@@ -808,7 +852,9 @@ export default function CheckoutPage() {
             >
               {
                 procesando
+
                   ? 'Procesando...'
+
                   : 'Confirmar compra'
               }
             </button>
@@ -892,7 +938,12 @@ export default function CheckoutPage() {
                       shrink-0
                     "
                   >
-                    ${producto.precio}
+                    {
+                      SITE_CONFIG
+                        .empresa
+                        .simboloMoneda
+                    }
+                    {producto.precio}
                   </span>
 
                 </div>
@@ -919,7 +970,12 @@ export default function CheckoutPage() {
                 <span>Total</span>
 
                 <span>
-                  ${total}
+                  {
+                    SITE_CONFIG
+                      .empresa
+                      .simboloMoneda
+                  }
+                  {total}
                 </span>
 
               </div>

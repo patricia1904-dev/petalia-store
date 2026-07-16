@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { SITE_CONFIG }
+  from '@/config/site'
 
 import {
   useEffect,
@@ -51,6 +53,16 @@ export default function HomePage() {
     setProductos,
   ] = useState<Producto[]>([])
 
+  const [
+    cargandoProductos,
+    setCargandoProductos,
+  ] = useState(true)
+
+  const [
+    errorProductos,
+    setErrorProductos,
+  ] = useState('')
+
   /*
     null significa que no hay una categoría
     seleccionada y se muestran todos los productos.
@@ -70,6 +82,9 @@ export default function HomePage() {
   ] = useState<string | null>(null)
 
   async function cargarProductos() {
+
+    setCargandoProductos(true)
+    setErrorProductos('')
 
     const { data, error } =
       await supabase
@@ -100,14 +115,22 @@ export default function HomePage() {
         error
       )
 
+      setErrorProductos(
+        'No pudimos cargar los productos. Revisá tu conexión e intentá nuevamente.'
+      )
+
+      setCargandoProductos(false)
+
       return
     }
 
     setProductos(
       (data as Producto[]) || []
     )
-  }
 
+    setCargandoProductos(false)
+  }
+  
   useEffect(() => {
 
     cargarProductos()
@@ -615,7 +638,7 @@ export default function HomePage() {
                 tracking-tight
               "
             >
-              Petalia Second Hand
+              {SITE_CONFIG.nombre}
             </button>
 
           </div>
@@ -915,7 +938,9 @@ export default function HomePage() {
         "
       >
 
-        {productosFiltrados.length === 0 && (
+        {/* CARGANDO */}
+
+        {cargandoProductos && (
 
           <div
             className="
@@ -924,27 +949,132 @@ export default function HomePage() {
             "
           >
 
-            <h2
+            <div
               className="
-                text-2xl
-                font-black
+                w-10
+                h-10
+                border-4
+                border-gray-200
+                border-t-black
+                rounded-full
+                animate-spin
+                mx-auto
+                mb-5
               "
-            >
-              No encontramos productos
-            </h2>
+            />
 
             <p
               className="
-                mt-2
-                text-gray-500
+                text-lg
+                font-semibold
               "
             >
-              Probá seleccionando otra
-              sección.
+              Cargando productos...
+            </p>
+
+            <p
+              className="
+                text-gray-500
+                mt-1
+              "
+            >
+              Estamos preparando el catálogo.
             </p>
 
           </div>
+
         )}
+
+        {/* ERROR */}
+
+        {
+          !cargandoProductos &&
+          errorProductos && (
+
+            <div
+              className="
+                py-20
+                text-center
+              "
+            >
+
+              <h2
+                className="
+                  text-2xl
+                  font-black
+                "
+              >
+                No pudimos cargar el catálogo
+              </h2>
+
+              <p
+                className="
+                  mt-2
+                  text-gray-500
+                "
+              >
+                {errorProductos}
+              </p>
+
+              <button
+                type="button"
+                onClick={cargarProductos}
+                className="
+                  mt-6
+                  bg-black
+                  text-white
+                  px-7
+                  py-3
+                  rounded-2xl
+                  font-bold
+                  hover:bg-gray-800
+                  transition
+                "
+              >
+                Reintentar
+              </button>
+
+            </div>
+
+          )
+        }
+
+        {/* SIN PRODUCTOS */}
+
+        {
+          !cargandoProductos &&
+          !errorProductos &&
+          productosFiltrados.length === 0 && (
+
+            <div
+              className="
+                py-20
+                text-center
+              "
+            >
+
+              <h2
+                className="
+                  text-2xl
+                  font-black
+                "
+              >
+                No encontramos productos
+              </h2>
+
+              <p
+                className="
+                  mt-2
+                  text-gray-500
+                "
+              >
+                Probá seleccionando otra sección.
+              </p>
+
+            </div>
+
+          )
+        }
 
         {categorias.map(
           (categoria) => {

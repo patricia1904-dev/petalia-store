@@ -1,4 +1,9 @@
 import {
+  createHmac,
+  timingSafeEqual,
+} from 'node:crypto'
+
+import {
   MercadoPagoConfig,
   Payment,
 } from 'mercadopago'
@@ -7,13 +12,19 @@ import {
   supabaseAdmin,
 } from '@/lib/supabaseAdmin'
 
+/*
+  Este webhook necesita el entorno Node.js
+  porque utiliza node:crypto.
+*/
+export const runtime = 'nodejs'
+
 const accessToken =
   process.env.MERCADOPAGO_ACCESS_TOKEN
 
 if (!accessToken) {
 
   throw new Error(
-    'Falta MERCADOPAGO_ACCESS_TOKEN en las variables de entorno'
+    'Falta MERCADOPAGO_ACCESS_TOKEN'
   )
 }
 
@@ -38,50 +49,296 @@ type Pedido = {
   productos: ProductoPedido[] | null
 }
 
+type WebhookBody = {
+  type?: string
+  topic?: string
+  action?: string
+
+  data?: {
+    id?: string | number
+  }
+}
+
 /*
-  Mercado Pago llama a esta función
-  mediante una solicitud POST.
+  Valida manualmente la firma enviada
+  por Mercado Pago.
+
+  El encabezado x-signature tiene una
+  estructura parecida a:
+
+  ts=1704908010,v1=firma_generada
 */
+function validarFirmaWebhook({
+  xSignature,
+  xRequestId,
+  dataId,
+  secret,
+}: {
+  xSignature: string
+  xRequestId: string
+  dataId: string
+  secret: string
+}) {
+
+  const partesFirma =
+    xSignature
+      .split(',')
+      .map(
+        (parte) =>
+          parte.trim()
+      )
+
+  const timestamp =
+    partesFirma
+      .find(
+        (parte) =>
+          parte.startsWith('ts=')
+      )
+      ?.slice(3)
+
+  const firmaRecibida =
+    partesFirma
+      .find(
+        (parte) =>
+          parte.startsWith('v1=')
+      )
+      ?.slice(3)
+
+  if (
+    !timestamp ||
+    !firmaRecibida
+  ) {
+
+    return false
+  }
+
+  /*
+    Una firma SHA-256 en hexadecimal debe
+    contener exactamente 64 caracteres.
+  */
+  if (
+    !/^[a-f0-9]{64}$/i.test(
+      firmaRecibida
+    )
+  ) {
+
+    return false
+  }
+
+  /*
+    Mercado Pago indica que data.id debe
+    normalizarse a minúsculas cuando sea
+    alfanumérico.
+  */
+  const dataIdNormalizado =
+    dataId.toLowerCase()
+
+  const manifiesto =
+    `id:${dataIdNormalizado};request-id:${xRequestId};ts:${timestamp};`
+
+  const firmaEsperada =
+    createHmac(
+      'sha256',
+      secret
+    )
+      .update(manifiesto)
+      .digest('hex')
+
+  const bufferRecibido =
+    Buffer.from(
+      firmaRecibida,
+      'hex'
+    )
+
+  const bufferEsperado =
+    Buffer.from(
+      firmaEsperada,
+      'hex'
+    )
+
+  if (
+    bufferRecibido.length !==
+    bufferEsperado.length
+  ) {
+
+    return false
+  }
+
+  /*
+    timingSafeEqual evita comparar las firmas
+    con una operación vulnerable a ataques
+    basados en diferencias de tiempo.
+  */
+  return timingSafeEqual(
+    bufferRecibido,
+    bufferEsperado
+  )
+}
+
 export async function POST(
   request: Request
 ) {
 
   try {
 
+    const webhookSecret =
+      process.env
+        .MERCADOPAGO_WEBHOOK_SECRET
+
+    if (!webhookSecret) {
+
+      console.error(
+        'Falta MERCADOPAGO_WEBHOOK_SECRET'
+      )
+
+      return Response.json(
+        {
+          error:
+            'El webhook no está configurado correctamente',
+        },
+        {
+          status: 500,
+        }
+      )
+    }
+
     const url =
       new URL(request.url)
 
     /*
-      Dependiendo de la notificación,
-      Mercado Pago puede enviar el ID:
+      Datos enviados por Mercado Pago
+      para autenticar la notificación.
+    */
 
-      - en la URL: data.id
-      - en el cuerpo: data.id
+    const xSignature =
+      request.headers.get(
+        'x-signature'
+      )
+
+    const xRequestId =
+      request.headers.get(
+        'x-request-id'
+      )
+
+    /*
+      Mercado Pago normalmente envía el
+      identificador como data.id en la URL.
+    */
+
+    const dataIdQuery =
+      url.searchParams.get(
+        'data.id'
+      )
+
+    /*
+      Leemos también el cuerpo porque allí
+      suelen venir type, action y data.id.
     */
 
     let body:
-      | {
-          type?: string
-          topic?: string
-          data?: {
-            id?: string | number
-          }
-        }
+      | WebhookBody
       | null = null
 
     try {
 
-      body = await request.json()
+      body =
+        await request.json()
 
     } catch {
 
-      /*
-        Algunas pruebas pueden llegar
-        sin un cuerpo JSON válido.
-      */
-
       body = null
     }
+
+    const dataIdBody =
+      body?.data?.id !== undefined
+
+        ? String(
+            body.data.id
+          )
+
+        : null
+
+    /*
+      Compatibilidad con distintos formatos
+      de notificación de Mercado Pago.
+    */
+
+    const paymentId =
+      dataIdQuery ||
+      dataIdBody ||
+      url.searchParams.get('id')
+
+    const dataIdFirma =
+      dataIdQuery ||
+      dataIdBody ||
+      url.searchParams.get('id')
+
+    if (
+      !xSignature ||
+      !xRequestId ||
+      !dataIdFirma
+    ) {
+
+      console.error(
+        'Notificación sin datos suficientes para validar la firma:',
+        {
+          tieneFirma:
+            Boolean(xSignature),
+
+          tieneRequestId:
+            Boolean(xRequestId),
+
+          tieneDataId:
+            Boolean(dataIdFirma),
+        }
+      )
+
+      return Response.json(
+        {
+          error:
+            'Notificación sin firma válida',
+        },
+        {
+          status: 401,
+        }
+      )
+    }
+
+    /*
+      VALIDACIÓN DE LA FIRMA
+    */
+
+    const firmaValida =
+      validarFirmaWebhook({
+        xSignature,
+        xRequestId,
+        dataId:
+          dataIdFirma,
+        secret:
+          webhookSecret,
+      })
+
+    if (!firmaValida) {
+
+      console.error(
+        'Firma inválida recibida en el webhook'
+      )
+
+      return Response.json(
+        {
+          error:
+            'Firma inválida',
+        },
+        {
+          status: 401,
+        }
+      )
+    }
+
+    /*
+      Desde este punto sabemos que la firma
+      de la notificación es válida.
+    */
 
     const tipoNotificacion =
       body?.type ||
@@ -89,18 +346,10 @@ export async function POST(
       url.searchParams.get('type') ||
       url.searchParams.get('topic')
 
-    const paymentId =
-      body?.data?.id ||
-      url.searchParams.get('data.id') ||
-      url.searchParams.get('id')
-
     /*
-      Mercado Pago puede enviar eventos que
-      no corresponden directamente a pagos.
-
-      Los ignoramos y devolvemos 200 para indicar
-      que la notificación fue recibida.
+      Solo procesamos notificaciones de pago.
     */
+
     if (
       tipoNotificacion &&
       tipoNotificacion !== 'payment'
@@ -108,21 +357,18 @@ export async function POST(
 
       return Response.json({
         recibido: true,
+        firmaValida: true,
         ignorado: true,
         motivo:
-          'La notificación no corresponde a un pago',
+          'El evento no corresponde a un pago',
       })
     }
 
     if (!paymentId) {
 
-      /*
-        Respondemos 200 porque algunos chequeos
-        o simulaciones pueden no incluir un ID.
-      */
-
       return Response.json({
         recibido: true,
+        firmaValida: true,
         procesado: false,
         motivo:
           'La notificación no contiene un ID de pago',
@@ -130,43 +376,76 @@ export async function POST(
     }
 
     /*
+      No confiamos únicamente en el cuerpo
+      de la notificación.
+
       Consultamos el pago directamente en
-      Mercado Pago.
-
-      Nunca confiamos únicamente en el contenido
-      recibido por el webhook.
+      Mercado Pago con nuestro Access Token.
     */
 
-    const pago =
-      await paymentClient.get({
-        id: String(paymentId),
-      })
+    let pago
 
-    const estadoPago =
-      pago.status
+    try {
 
-    /*
-      Solo completamos la venta cuando
-      Mercado Pago confirma "approved".
-    */
+      pago =
+        await paymentClient.get({
+          id:
+            String(paymentId),
+        })
 
-    if (
-      estadoPago !== 'approved'
-    ) {
+    } catch (error) {
+
+      /*
+        El simulador puede utilizar un ID
+        ficticio que no representa un pago real.
+
+        Como la firma ya fue validada,
+        respondemos 200 para confirmar
+        que recibimos correctamente la prueba.
+      */
+
+      console.error(
+        'No se pudo consultar el pago:',
+        {
+          paymentId:
+            String(paymentId),
+
+          error,
+        }
+      )
 
       return Response.json({
         recibido: true,
+        firmaValida: true,
         procesado: false,
-        paymentId:
-          String(paymentId),
-        estado:
-          estadoPago,
+        motivo:
+          'No se encontró un pago real para procesar',
       })
     }
 
     /*
-      external_reference contiene el ID del pedido
-      porque lo configuramos al crear la preferencia.
+      Solo completamos la venta cuando
+      Mercado Pago confirma approved.
+    */
+
+    if (
+      pago.status !== 'approved'
+    ) {
+
+      return Response.json({
+        recibido: true,
+        firmaValida: true,
+        procesado: false,
+        paymentId:
+          String(paymentId),
+        estado:
+          pago.status,
+      })
+    }
+
+    /*
+      external_reference contiene el ID
+      del pedido guardado en Supabase.
     */
 
     const pedidoId =
@@ -175,14 +454,18 @@ export async function POST(
       )
 
     if (
-      !Number.isInteger(pedidoId) ||
+      !Number.isInteger(
+        pedidoId
+      ) ||
       pedidoId <= 0
     ) {
 
       console.error(
-        'El pago aprobado no tiene un pedido válido:',
+        'Pago aprobado sin pedido válido:',
         {
-          paymentId,
+          paymentId:
+            String(paymentId),
+
           externalReference:
             pago.external_reference,
         }
@@ -191,7 +474,7 @@ export async function POST(
       return Response.json(
         {
           error:
-            'El pago no tiene una referencia de pedido válida',
+            'Referencia de pedido inválida',
         },
         {
           status: 400,
@@ -200,8 +483,7 @@ export async function POST(
     }
 
     /*
-      Obtenemos el pedido usando el cliente privado
-      de Supabase, exclusivo del servidor.
+      Buscamos el pedido relacionado.
     */
 
     const {
@@ -215,7 +497,10 @@ export async function POST(
         estado,
         productos
       `)
-      .eq('id', pedidoId)
+      .eq(
+        'id',
+        pedidoId
+      )
       .single<Pedido>()
 
     if (
@@ -234,7 +519,7 @@ export async function POST(
       return Response.json(
         {
           error:
-            'No se encontró el pedido relacionado con el pago',
+            'No se encontró el pedido relacionado',
         },
         {
           status: 404,
@@ -243,10 +528,11 @@ export async function POST(
     }
 
     /*
-      Una misma notificación puede llegar más de una vez.
+      Mercado Pago puede repetir una
+      notificación.
 
-      Si el pedido ya está Pagado o en una etapa posterior,
-      no repetimos las actualizaciones.
+      Si el pedido ya fue procesado,
+      no volvemos a modificarlo.
     */
 
     const estadosYaProcesados = [
@@ -264,6 +550,7 @@ export async function POST(
 
       return Response.json({
         recibido: true,
+        firmaValida: true,
         procesado: true,
         repetido: true,
         pedidoId,
@@ -273,8 +560,8 @@ export async function POST(
     }
 
     /*
-      Verificamos que el importe aprobado coincida
-      con el total guardado en Supabase.
+      Comprobamos que el importe aprobado
+      coincida con el total del pedido.
     */
 
     const importePagado =
@@ -307,7 +594,7 @@ export async function POST(
       return Response.json(
         {
           error:
-            'El importe del pago no coincide con el pedido',
+            'El importe pagado no coincide con el pedido',
         },
         {
           status: 400,
@@ -316,8 +603,8 @@ export async function POST(
     }
 
     /*
-      Extraemos los IDs de los productos incluidos
-      en el pedido.
+      Obtenemos los identificadores de
+      las prendas incluidas en el pedido.
     */
 
     const productoIds =
@@ -326,7 +613,9 @@ export async function POST(
       )
         .map(
           (producto) =>
-            Number(producto.id)
+            Number(
+              producto.id
+            )
         )
         .filter(
           (id) =>
@@ -339,7 +628,7 @@ export async function POST(
     ) {
 
       console.error(
-        'El pedido aprobado no contiene productos válidos:',
+        'El pedido no contiene productos válidos:',
         pedidoId
       )
 
@@ -360,8 +649,7 @@ export async function POST(
     */
 
     const {
-      error:
-        errorProductos,
+      error: errorProductos,
     } = await supabaseAdmin
       .from('productos')
       .update({
@@ -375,7 +663,7 @@ export async function POST(
     if (errorProductos) {
 
       console.error(
-        'No se pudieron marcar los productos como vendidos:',
+        'Error marcando productos como vendidos:',
         errorProductos
       )
 
@@ -391,7 +679,7 @@ export async function POST(
     }
 
     /*
-      Finalmente cambiamos el pedido a Pagado.
+      Actualizamos el pedido a Pagado.
     */
 
     const {
@@ -402,21 +690,23 @@ export async function POST(
       .update({
         estado: 'Pagado',
       })
-      .eq('id', pedidoId)
+      .eq(
+        'id',
+        pedidoId
+      )
 
     if (
       errorActualizarPedido
     ) {
 
       console.error(
-        'No se pudo actualizar el pedido:',
+        'Error actualizando el pedido:',
         errorActualizarPedido
       )
 
       /*
-        Intentamos revertir los productos para evitar
-        que queden vendidos mientras el pedido no figura
-        como Pagado.
+        Intentamos revertir el cambio de
+        los productos si falla el pedido.
       */
 
       await supabaseAdmin
@@ -432,7 +722,7 @@ export async function POST(
       return Response.json(
         {
           error:
-            'No se pudo actualizar el estado del pedido',
+            'No se pudo actualizar el pedido',
         },
         {
           status: 500,
@@ -441,11 +731,12 @@ export async function POST(
     }
 
     console.log(
-      `Pago aprobado. Pedido ${pedidoId} actualizado correctamente.`
+      `Pedido ${pedidoId} pagado correctamente`
     )
 
     return Response.json({
       recibido: true,
+      firmaValida: true,
       procesado: true,
       pedidoId,
       paymentId:
@@ -476,11 +767,12 @@ export async function POST(
 }
 
 /*
-  Esto permite abrir la dirección en el navegador
-  y comprobar que la ruta existe.
+  Permite comprobar desde el navegador
+  que la ruta está disponible.
 
-  No procesa ningún pago.
+  No procesa pagos.
 */
+
 export async function GET() {
 
   return Response.json({
